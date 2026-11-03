@@ -156,6 +156,40 @@ def content_box(node, frame_bb):
     return {"x": round(x0, 2), "y": round(y0, 2), "w": round(max(x1 - x0, 0), 2), "h": round(max(y1 - y0, 0), 2)}
 
 
+def union_box(node, frame_bb):
+    """Unclipped union of visible descendants' bounding boxes: what a node PNG export covers."""
+    xs, ys, xe, ye = [], [], [], []
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.get("visible", True) is False:
+            continue
+        b = n.get("absoluteBoundingBox")
+        if b:
+            xs.append(b["x"]); ys.append(b["y"]); xe.append(b["x"] + b["width"]); ye.append(b["y"] + b["height"])
+        if n is node or not n.get("clipsContent"):
+            stack.extend(n.get("children", []) or [])
+    fx, fy = frame_bb["x"], frame_bb["y"]
+    return {"x": round(min(xs) - fx, 2), "y": round(min(ys) - fy, 2), "w": round(max(xe) - min(xs), 2), "h": round(max(ye) - min(ys), 2)}
+
+
+CONTEXT_BLENDS = {"MULTIPLY", "SCREEN", "OVERLAY", "DARKEN", "LIGHTEN", "COLOR_DODGE", "COLOR_BURN", "HARD_LIGHT",
+                  "SOFT_LIGHT", "DIFFERENCE", "EXCLUSION", "HUE", "SATURATION", "COLOR", "LUMINOSITY", "LINEAR_BURN", "LINEAR_DODGE"}
+
+
+def needs_backdrop(node):
+    """A nested blend mode only renders right over the frame behind it, so an isolated export is wrong."""
+    stack = list(node.get("children", []) or [])
+    while stack:
+        n = stack.pop()
+        if n.get("visible", True) is False:
+            continue
+        if n.get("blendMode") in CONTEXT_BLENDS:
+            return True
+        stack.extend(n.get("children", []) or [])
+    return False
+
+
 def text_style(style):
     ps = style.get("fontPostScriptName") or ""
     fam, wt, it = FONT_MAP.get(ps, (style.get("fontFamily", "sans-serif"), style.get("fontWeight", 400), "normal"))
@@ -410,8 +444,8 @@ def convert_frame(concept, frame, fmt):
         cb = content_box(c, bb)
         spec["layers"].append({
             "id": c["id"], "kind": "image", "role": "decor", "name": nm,
-            "box": rb, "bbox": dict(rb), "rbox": rel_box(c, bb, "absoluteRenderBounds"), "content": cb, "blend": blend, "opacity": 1,
-            "src": f"assets/{c['id'].replace(':', '-')}.png", "tags": tags_for(nm),
+            "box": rb, "bbox": dict(rb), "rbox": rel_box(c, bb, "absoluteRenderBounds"), "ubox": union_box(c, bb), "content": cb, "blend": blend, "opacity": 1,
+            "src": f"assets/{c['id'].replace(':', '-')}.png", "tags": tags_for(nm), "backdrop": needs_backdrop(c),
         })
         spec["exports"].append({"id": c["id"], "format": "png"})
 
@@ -467,9 +501,55 @@ def place_exports(spec):
         if r and abs(r["w"] - size[0]) <= 2 and abs(r["h"] - size[1]) <= 2:
             l["box"] = {"x": r["x"], "y": r["y"], "w": size[0], "h": size[1]}
             continue
+        u = l.get("ubox")
+        if u and abs(u["w"] - size[0]) <= 3 and abs(u["h"] - size[1]) <= 3:
+            l["box"] = {"x": u["x"], "y": u["y"], "w": size[0], "h": size[1]}
+            continue
         b = l["bbox"]
         cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
         l["box"] = {"x": round(cx - size[0] / 2, 2), "y": round(cy - size[1] / 2, 2), "w": size[0], "h": size[1]}
+
+
+def overlaps(a, b):
+    return a["x"] < b["x"] + b["w"] and b["x"] < a["x"] + a["w"] and a["y"] < b["y"] + b["h"] and b["y"] < a["y"] + a["h"]
+
+
+def apply_backdrops(pieces, fresh):
+    """Swap layers that need their backdrop for a crop of the frame render, when nothing above them overlaps."""
+    todo = []
+    for spec in pieces:
+        layers = spec["layers"]
+        for i, l in enumerate(layers):
+            if l.get("kind") != "image" or not l.get("backdrop"):
+                continue
+            W, H = spec["width"], spec["height"]
+            x0, y0 = max(0, l["box"]["x"]), max(0, l["box"]["y"])
+            x1, y1 = min(W, l["box"]["x"] + l["box"]["w"]), min(H, l["box"]["y"] + l["box"]["h"])
+            region = {"x": round(x0), "y": round(y0), "w": round(x1 - x0), "h": round(y1 - y0)}
+            above = [o for o in layers[i + 1:] if o.get("box") and overlaps(o["box"], region)]
+            if above:
+                spec["warnings"].append(f"{l['id']} needs its backdrop but {above[0]['name'][:40]} sits above it")
+                continue
+            todo.append((spec, l, region))
+    frames = sorted({spec["figmaNode"] for spec, _, _ in todo})
+    fdir = SRC / "frames"
+    fdir.mkdir(parents=True, exist_ok=True)
+    need = [f for f in frames if fresh or not (fdir / f"{f.replace(':', '-')}.png").exists()]
+    for k in range(0, len(need), 8):
+        res = ultron("get_images", {"file_key": FILE_KEY, "ids": need[k:k + 8], "format": "png", "scale": 1})
+        for nid, url in (res.get("images") or {}).items():
+            if url:
+                subprocess.run([CURL, "-sSL", "--retry", "3", "-o", str(fdir / f"{nid.replace(':', '-')}.png"), url])
+    for spec, l, r in todo:
+        src = fdir / f"{spec['figmaNode'].replace(':', '-')}.png"
+        if not src.exists():
+            continue
+        out = SRC / "assets" / f"{l['id'].replace(':', '-')}-ctx.png"
+        shutil.copy(src, out)
+        subprocess.run(["sips", "-c", str(r["h"]), str(r["w"]), "--cropOffset", str(r["y"]), str(r["x"]), str(out)], capture_output=True, check=True)
+        l["src"] = f"assets/{out.name}"
+        l["box"] = dict(r); l["rbox"] = dict(r); l["content"] = dict(r)
+        l["blend"] = "normal"
 
 
 def export_images(ids_fmt, dest):
@@ -605,6 +685,8 @@ def main():
                     subprocess.run([CURL, "-sSL", "--retry", "3", "-o", str(tdest / f"{nid.replace(':', '-')}.png"), url])
     for spec in pieces:
         place_exports(spec)
+    apply_backdrops(pieces, fresh=not args.skip_images)
+    for spec in pieces:
         spec["missingAssets"] = [l["id"] for l in spec["layers"] if l.get("src") and not (SRC / l["src"]).exists()]
         spec.pop("exports", None)
         (SRC / "pieces" / f"{spec['id']}.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False))
