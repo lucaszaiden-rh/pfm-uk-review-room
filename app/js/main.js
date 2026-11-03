@@ -26,7 +26,7 @@ const app = {
   insitu: true,
   safe: false,
   figma: false,
-  tab: 'comments',
+  tab: 'perf',
   view: null,
   spec: null,
   pieceId: null,
