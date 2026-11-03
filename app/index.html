@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <title>Review room</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <main id="gate" class="gate" aria-labelledby="gate-title">
+    <form class="gate-card" id="gate-form" autocomplete="off">
+      <h1 id="gate-title" class="gate-title">Review room</h1>
+      <p class="gate-sub">Private. Enter the password you were given.</p>
+      <label class="gate-field" id="gate-field">
+        <span class="sr-only">Password</span>
+        <input id="gate-input" type="password" name="password" placeholder="Password" autocomplete="current-password" required autofocus>
+        <button type="submit" class="gate-go" aria-label="Unlock">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
+      </label>
+      <p class="gate-msg" id="gate-msg" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+
+  <div id="app" class="app" hidden>
+    <header class="top">
+      <div class="top-brief">
+        <button class="rail-toggle icon-btn" id="rail-toggle" aria-label="Pieces">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
+        <div class="brief-text">
+          <span class="brief-kicker">Review room</span>
+          <span class="brief-name" id="brief-name"></span>
+        </div>
+      </div>
+      <div class="seg" id="format-seg" role="radiogroup" aria-label="Format"></div>
+      <div class="top-right">
+        <div class="seg" id="mode-seg" role="radiogroup" aria-label="Mode">
+          <button role="radio" data-mode="view" aria-checked="true">View <kbd>V</kbd></button>
+          <button role="radio" data-mode="comment" aria-checked="false">Comment <kbd>C</kbd></button>
+          <button role="radio" data-mode="edit" aria-checked="false">Edit <kbd>E</kbd></button>
+        </div>
+        <button class="ghost-btn" id="quick-btn" aria-label="Quick switcher"><span>Jump to</span> <kbd>⌘K</kbd></button>
+      </div>
+    </header>
+
+    <nav class="rail" id="rail" aria-label="Pieces"></nav>
+
+    <section class="stage" id="stage" aria-label="Piece">
+      <div class="stage-bar">
+        <div class="stage-title">
+          <span class="stage-concept" id="stage-concept"></span>
+          <span class="stage-label" id="stage-label"></span>
+        </div>
+        <div class="stage-tools">
+          <div class="chips" id="chips" aria-live="polite"></div>
+          <button class="toggle" id="insitu-btn" aria-pressed="true" title="Flat view while off; every piece opens in situ">In situ <kbd>M</kbd></button>
+          <button class="toggle" id="safe-btn" aria-pressed="false">Safe zone <kbd>S</kbd></button>
+          <button class="toggle" id="figma-btn" aria-pressed="false" title="Hold F to compare">Figma render <kbd>F</kbd></button>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div class="mock" id="mock"></div>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Review">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="comments" aria-selected="true">Comments <span class="count" id="c-count"></span></button>
+        <button role="tab" data-tab="perf" aria-selected="false">Performance</button>
+        <button role="tab" data-tab="edit" aria-selected="false">Edit</button>
+      </div>
+      <div class="tab-body" id="tab-comments" role="tabpanel"></div>
+      <div class="tab-body" id="tab-perf" role="tabpanel" hidden></div>
+      <div class="tab-body" id="tab-edit" role="tabpanel" hidden></div>
+    </aside>
+  </div>
+
+  <dialog class="quick" id="quick">
+    <input id="quick-input" type="text" placeholder="Jump to a concept, direction or format" aria-label="Search pieces" autocomplete="off">
+    <ul id="quick-list" role="listbox"></ul>
+  </dialog>
+  <div class="pop-layer" id="pop-layer"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
