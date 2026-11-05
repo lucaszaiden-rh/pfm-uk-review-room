@@ -1,18 +1,5 @@
 # Review room
 
-## Publish
-
-1. Push to the enterprise remote (SSH through the `github-rhmarkets` host alias):
-
-   ```sh
-   git remote add origin git@github-rhmarkets:rhmarkets/pfm-uk-review-room.git
-   git remote -v
-   git push -u origin main
-   ```
-
-2. On GitHub: Settings → Pages → Source "Deploy from a branch" → Branch `main`, folder `/docs`.
-3. On EMU (`rhmarkets`), Pages sites are private to the enterprise.
-
 A password-protected, dependency-free static web app for reviewing a set of static ads with the team:
 pick a concept, direction and format, see each piece flat or in a generic in-situ mockup, drop
 Figma-style comments, edit copy and images live, and read an explainable performance heuristic.
@@ -124,8 +111,8 @@ Security notes:
   random password and share it out of band.
 - Changing the password does not protect old commits: their packs still open with the old password.
   To retire a password, rewrite history or start a fresh repo.
-- The repo lives in the `rhmarkets` enterprise org (EMU), where Pages sites are private to the
-  enterprise. For any other host, ask in #ask-ai first.
+- Hosting on a personal GitHub Pages origin is outside the company's managed deployment paths. It was
+  confirmed knowingly; for a sanctioned internal host ask in #ask-ai.
 
 ## Using it
 

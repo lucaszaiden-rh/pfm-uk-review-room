@@ -552,6 +552,40 @@ def apply_backdrops(pieces, fresh):
         l["blend"] = "normal"
 
 
+def apply_bakes(pieces, bakes):
+    """Config "bake": {"<piece id>": {"region": {x, y, w, h}, "replace": [layer ids]}} swaps those layers for one
+    crop of the Figma frame render. For heroes whose backdrop blend sits under live text (keep the region clear of it)."""
+    fdir = SRC / "frames"
+    fdir.mkdir(parents=True, exist_ok=True)
+    for spec in pieces:
+        b = bakes.get(spec["id"])
+        if not b:
+            continue
+        nid = spec["figmaNode"]
+        src = fdir / f"{nid.replace(':', '-')}-bake.png"
+        res = ultron("get_images", {"file_key": FILE_KEY, "ids": [nid], "format": "png", "scale": 1})
+        url = (res.get("images") or {}).get(nid)
+        if url:
+            subprocess.run([CURL, "-sSL", "--retry", "3", "-o", str(src), url])
+        if not src.exists():
+            spec["warnings"].append(f"bake: no frame render for {nid}")
+            continue
+        r = b["region"]
+        out = SRC / "assets" / f"{nid.replace(':', '-')}-bake.png"
+        shutil.copy(src, out)
+        subprocess.run(["sips", "-c", str(r["h"]), str(r["w"]), "--cropOffset", str(r["y"]), str(r["x"]), str(out)], capture_output=True, check=True)
+        layers = spec["layers"]
+        idx = [i for i, l in enumerate(layers) if l["id"] in b["replace"]]
+        if not idx:
+            spec["warnings"].append("bake: none of the listed layers found")
+            continue
+        new = dict(layers[idx[0]], src=f"assets/{out.name}", box=dict(r), rbox=dict(r), content=dict(r), bbox=dict(r),
+                   ubox=dict(r), blend="normal", opacity=1, backdrop=False, name=layers[idx[0]]["name"] + " (baked from Figma render)")
+        spec["layers"] = [l for l in layers if l["id"] not in b["replace"]]
+        spec["layers"].insert(idx[0], new)
+        spec["warnings"] = [w for w in spec["warnings"] if not any(w.startswith(f"{i} ") for i in b["replace"])]
+
+
 def export_images(ids_fmt, dest):
     """Export node ids via figma get_images (scale 1) and download them."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -686,6 +720,7 @@ def main():
     for spec in pieces:
         place_exports(spec)
     apply_backdrops(pieces, fresh=not args.skip_images)
+    apply_bakes(pieces, cfg.get("bake", {}))
     for spec in pieces:
         spec["missingAssets"] = [l["id"] for l in spec["layers"] if l.get("src") and not (SRC / l["src"]).exists()]
         spec.pop("exports", None)
